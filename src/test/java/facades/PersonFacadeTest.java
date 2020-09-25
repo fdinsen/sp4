@@ -126,6 +126,21 @@ public class PersonFacadeTest {
         assertEquals(personToAdd.getfName(), addedPerson.getfName());
         assertEquals(addressToAdd.getCity(), addedPerson.getCity());
     }
+    
+    @Test
+    public void testAddPersonWithExistingAddress() throws PersonNotFoundException, MissingInputException {
+        Person personToAdd = new Person("Neue", "Personen", "55554444");
+        Address addressToAdd = new Address("Petersvej", "2340", "Petsburg");
+
+        PersonDTO added
+                = facade.addPerson(personToAdd.getfName(), personToAdd.getlName(), personToAdd.getPhone(),
+                        addressToAdd.getStreet(), addressToAdd.getZip(), addressToAdd.getCity());
+
+        PersonDTO addedPerson = facade.getPerson(added.getId());
+
+        assertEquals(personToAdd.getfName(), addedPerson.getfName());
+        assertEquals(addressToAdd.getCity(), addedPerson.getCity());
+    }
 
     @Test
     public void testEditPersonNoAddress() throws PersonNotFoundException {
@@ -169,6 +184,23 @@ public class PersonFacadeTest {
     @Test
     public void testDeletePersonOnCount() throws PersonNotFoundException {
         int expectedCount = 2;
+
+        facade.deletePerson(p1.getId());
+        PersonsDTO all = facade.getAllPersons();
+        int actualCount = all.size();
+
+        assertEquals(expectedCount, actualCount);
+    }
+    
+    @Test
+    public void testDeletePersonSameAddress() throws PersonNotFoundException, MissingInputException {
+        Person personToAdd = new Person("Neue", "Personen", "55554444");
+        Address addressToAdd = new Address("Petersvej", "2340", "Petsburg");
+
+        PersonDTO added
+                = facade.addPerson(personToAdd.getfName(), personToAdd.getlName(), personToAdd.getPhone(),
+                        addressToAdd.getStreet(), addressToAdd.getZip(), addressToAdd.getCity());
+        int expectedCount = 3;
 
         facade.deletePerson(p1.getId());
         PersonsDTO all = facade.getAllPersons();
@@ -236,4 +268,26 @@ public class PersonFacadeTest {
         assertEquals(p1.getPhone(), actual.getPhone());
     }
 
+    @Test 
+    public void testEditPersonMultiplePeopleOnAddress() throws PersonNotFoundException {
+        //Arrange
+        //Create person with an existing address
+        Person personToAdd = new Person("Neue", "Personen", "55554444");
+        Address addressToAdd = new Address("Petersvej", "2340", "Petsburg");
+        // create person object with edited lastname
+        Person editedPerson = new Person(p1.getfName(), "changeson", p1.getPhone());
+        Address editedAddres = new Address("Petersvej", "1122", "Kasperby");
+        editedPerson.setAddress(a1);
+        // set the id to the same as p1, so p1 will be edited
+        editedPerson.setId(p1.getId());
+        // create a dto from person
+        PersonDTO edit = new PersonDTO(editedPerson);
+        // edit
+        facade.editPerson(edit);
+
+        PersonDTO actual = facade.getPerson(p1.getId());
+
+        assertEquals(edit.getlName(), actual.getlName());
+        assertEquals(edit.getStreet(), actual.getStreet());
+    }
 }

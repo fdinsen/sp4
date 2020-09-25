@@ -40,15 +40,21 @@ public class PersonFacade implements IPersonFacade {
 
     @Override
     public PersonDTO addPerson(String fName, String lName, String phone, String street, String zip, String city) throws MissingInputException {
-        if(fName == null || lName == null || phone == null){
+        if (fName == null || lName == null || phone == null) {
             throw new MissingInputException("fName, lName or phone is missing.");
-        }else if(street == null || zip == null || city == null) {
+        } else if (street == null || zip == null || city == null) {
             throw new MissingInputException("street, zip or city is missing");
         }
         EntityManager em = getEntityManager();
         try {
             Person person = new Person(fName, lName, phone);
-            person.setAddress(new Address(street, zip, city));
+
+            Address address = getExistingAddress(em, street, zip, city);
+            if (address != null) {
+                person.setAddress(address);
+            } else {
+                person.setAddress(new Address(street, zip, city));
+            }
             em.getTransaction().begin();
             em.persist(person);
             em.getTransaction().commit();
@@ -66,18 +72,18 @@ public class PersonFacade implements IPersonFacade {
             if (personToBeDeleted != null) {
                 em.getTransaction().begin();
                 em.remove(personToBeDeleted);
-                em.getTransaction().commit();
-                if(personToBeDeleted.getAddress() != null) {
-                    em.getTransaction().begin();
-                    em.remove(personToBeDeleted.getAddress());
-                    em.getTransaction().commit();
+                if (personToBeDeleted.getAddress() != null) {
+                    if (isAddressInUse(em, personToBeDeleted.getAddress().getId())) {
+                        em.remove(personToBeDeleted.getAddress());
+                    }
+
                 }
-                
+                em.getTransaction().commit();
                 return new PersonDTO(personToBeDeleted);
-            }else {
+            } else {
                 throw new PersonNotFoundException("Could not delete, provided id does not exist");
             }
-                
+
         } finally {
             em.close();
         }
@@ -123,28 +129,39 @@ public class PersonFacade implements IPersonFacade {
         try {
             em.getTransaction().begin();
             Person editedPerson = em.find(Person.class, p.getId());
-            if(editedPerson != null) {
-                if(p.getfName() != null) {
+            if (editedPerson != null) {
+                if (p.getfName() != null) {
                     editedPerson.setfName(p.getfName());
                 }
-                if(p.getlName() != null) {
+                if (p.getlName() != null) {
                     editedPerson.setlName(p.getlName());
                 }
-                if(p.getPhone() != null) {
-                    editedPerson.setPhone(p.getPhone());    
+                if (p.getPhone() != null) {
+                    editedPerson.setPhone(p.getPhone());
                 }
-                if (p.getStreet() != null) {
-                    editedPerson.getAddress().setStreet(p.getStreet()); 
-                }
-                if (p.getZip() != null) {
-                    editedPerson.getAddress().setZip(p.getZip());
-                }
-                if (p.getCity() != null) {
-                    editedPerson.getAddress().setCity(p.getCity());
+                //If there is more than one person on the address, we need to create a new address instead of editing it
+                int numberOfPersons = numberOfPersonsOnAddress(
+                        em, editedPerson.getAddress().getStreet(),
+                        editedPerson.getAddress().getZip(),
+                        editedPerson.getAddress().getCity());
+                if (numberOfPersons > 1) {
+                    Address newAddress = new Address(p.getStreet(), p.getZip(), p.getCity());
+                    editedPerson.setAddress(newAddress);
+                //If there is just the one, we can just edit it    
+                } else {
+                    if (p.getStreet() != null) {
+                        editedPerson.getAddress().setStreet(p.getStreet());
+                    }
+                    if (p.getZip() != null) {
+                        editedPerson.getAddress().setZip(p.getZip());
+                    }
+                    if (p.getCity() != null) {
+                        editedPerson.getAddress().setCity(p.getCity());
+                    }
                 }
                 em.getTransaction().commit();
                 return new PersonDTO(editedPerson);
-            }else {
+            } else {
                 throw new PersonNotFoundException("Could not edit, provided id does not exist");
             }
         } finally {
@@ -152,4 +169,34 @@ public class PersonFacade implements IPersonFacade {
         }
     }
 
+    private boolean isAddressInUse(EntityManager em, int addressId) {
+        Query checkAddress = em.createQuery("SELECT p FROM Person p WHERE p.address.id = :add_id");
+        checkAddress.setParameter("add_id", addressId);
+        return checkAddress.getResultList().isEmpty();
+    }
+
+    private Address getExistingAddress(EntityManager em, String street, String zip, String city) {
+        Query checkAddress = em.createQuery("SELECT a FROM Address a WHERE a.street = :street AND a.zip = :zip AND a.city = :city");
+        checkAddress.setParameter("street", street);
+        checkAddress.setParameter("zip", zip);
+        checkAddress.setParameter("city", city);
+
+        //get address as a list, because getSingleResult throws a exception if result is 0
+        List<Address> address = checkAddress.getResultList();
+        if (address.size() > 0) {
+            return address.get(0);
+        } else {
+            return null;
+        }
+    }
+
+    private int numberOfPersonsOnAddress(EntityManager em, String street, String zip, String city) {
+        Query checkAddress = em.createQuery("SELECT p FROM Person p WHERE p.address.street = :street AND p.address.zip = :zip AND p.address.city = :city");
+        checkAddress.setParameter("street", street);
+        checkAddress.setParameter("zip", zip);
+        checkAddress.setParameter("city", city);
+
+        int result = checkAddress.getResultList().size();
+        return result;
+    }
 }
