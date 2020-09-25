@@ -2,6 +2,7 @@ package facades;
 
 import dto.PersonDTO;
 import dto.PersonsDTO;
+import entities.Address;
 import entities.Person;
 import exceptions.MissingInputException;
 import exceptions.PersonNotFoundException;
@@ -38,13 +39,16 @@ public class PersonFacade implements IPersonFacade {
     }
 
     @Override
-    public PersonDTO addPerson(String fName, String lName, String phone) throws MissingInputException {
+    public PersonDTO addPerson(String fName, String lName, String phone, String street, String zip, String city) throws MissingInputException {
         if(fName == null || lName == null || phone == null){
-            throw new MissingInputException("First name, last name or phone is missing.");
+            throw new MissingInputException("fName, lName or phone is missing.");
+        }else if(street == null || zip == null || city == null) {
+            throw new MissingInputException("street, zip or city is missing");
         }
         EntityManager em = getEntityManager();
         try {
             Person person = new Person(fName, lName, phone);
+            person.setAddress(new Address(street, zip, city));
             em.getTransaction().begin();
             em.persist(person);
             em.getTransaction().commit();
@@ -62,10 +66,13 @@ public class PersonFacade implements IPersonFacade {
             if (personToBeDeleted != null) {
                 em.getTransaction().begin();
                 em.remove(personToBeDeleted);
-//            Query q = em.createQuery("DELETE FROM Person p WHERE p.id = :id");
-//            q.setParameter("id", id);
-//            q.executeUpdate();
                 em.getTransaction().commit();
+                if(personToBeDeleted.getAddress() != null) {
+                    em.getTransaction().begin();
+                    em.remove(personToBeDeleted.getAddress());
+                    em.getTransaction().commit();
+                }
+                
                 return new PersonDTO(personToBeDeleted);
             }else {
                 throw new PersonNotFoundException("Could not delete, provided id does not exist");
@@ -80,7 +87,6 @@ public class PersonFacade implements IPersonFacade {
     public PersonDTO getPerson(int id) throws PersonNotFoundException {
         EntityManager em = getEntityManager();
         try {
-
             Person person = em.find(Person.class, id);
             if (person != null) {
                 return new PersonDTO(person);
@@ -103,7 +109,7 @@ public class PersonFacade implements IPersonFacade {
     public PersonsDTO getAllPersons() {
         EntityManager em = getEntityManager();
         try {
-            TypedQuery<Person> q = em.createQuery("SELECT p FROM Person p", Person.class);
+            TypedQuery<Person> q = em.createQuery("SELECT p FROM Person p LEFT JOIN Address a ON p.id = a.id", Person.class);
             PersonsDTO all = new PersonsDTO(q.getResultList());
             return all;
         } finally {
@@ -122,10 +128,19 @@ public class PersonFacade implements IPersonFacade {
                     editedPerson.setfName(p.getfName());
                 }
                 if(p.getlName() != null) {
-                editedPerson.setlName(p.getlName());
+                    editedPerson.setlName(p.getlName());
                 }
                 if(p.getPhone() != null) {
-                editedPerson.setPhone(p.getPhone());    
+                    editedPerson.setPhone(p.getPhone());    
+                }
+                if (p.getStreet() != null) {
+                    editedPerson.getAddress().setStreet(p.getStreet()); 
+                }
+                if (p.getZip() != null) {
+                    editedPerson.getAddress().setZip(p.getZip());
+                }
+                if (p.getCity() != null) {
+                    editedPerson.getAddress().setCity(p.getCity());
                 }
                 em.getTransaction().commit();
                 return new PersonDTO(editedPerson);
